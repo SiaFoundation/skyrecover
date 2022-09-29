@@ -27,9 +27,12 @@ func writeSubFile(r io.Reader, fp string, n int64) error {
 		return fmt.Errorf("failed to create file %v: %w", fp, err)
 	}
 	defer f.Close()
-
-	_, err = io.CopyN(f, r, n)
-	return err
+	if n, err = io.CopyN(f, r, n); err != nil {
+		return fmt.Errorf("failed to copy data (%v bytes written): %w", n, err)
+	} else if err := f.Sync(); err != nil {
+		return fmt.Errorf("failed to sync file: %w", err)
+	}
+	return nil
 }
 
 // findMatchingSkyKey tries to find a Skykey that can decrypt the identifier and
@@ -194,13 +197,15 @@ func main() {
 
 	// if there are no subfiles, the -extended file should be the full raw data
 	if len(meta.Subfiles) == 0 {
-		log.Printf("Found 1 file %v - %v bytes", meta.Filename, meta.Length)
+		log.Println("Found 1 file")
 		outPath := filepath.Join(*outputDir, meta.Filename)
 		if err := writeSubFile(tr, outPath, int64(meta.Length)); err != nil {
-			log.Fatalln("failed to write subfile:", err)
+			log.Fatalln("failed to write file:", err)
 		}
-		log.Printf("%v %v bytes %x checksum", outPath, meta.Length, h.Sum(nil))
+		log.Printf("Recovered file %v (%v/%v) %v bytes %x checksum", meta.Filename, 1, 1, meta.Length, h.Sum(nil))
 	}
+
+	log.Printf("Found %v files", len(meta.Subfiles))
 
 	var i int
 	n := len(meta.Subfiles)
@@ -208,8 +213,6 @@ func main() {
 		i++
 		// reset the hasher
 		h.Reset()
-
-		log.Printf("Found file %v (%v/%v) - %v bytes at %v offset", subfile.Filename, i, n, subfile.Len, subfile.Offset)
 		// seek to the file offset in the -extended file
 		if _, err := ef.Seek(int64(subfile.Offset), io.SeekStart); err != nil {
 			log.Fatalln("failed to seek to subfile:", err)
@@ -219,6 +222,6 @@ func main() {
 		if err := writeSubFile(tr, outPath, int64(subfile.Len)); err != nil {
 			log.Fatalln("failed to write subfile:", err)
 		}
-		log.Printf("%v %v bytes %x checksum", outPath, subfile.Len, h.Sum(nil))
+		log.Printf("Recovered file %v (%v/%v) %v bytes %x checksum", subfile.Filename, i, n, subfile.Len, h.Sum(nil))
 	}
 }
