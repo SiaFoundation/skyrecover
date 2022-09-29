@@ -20,6 +20,7 @@ import (
 
 const sectorSize = 1 << 22 // 4 MiB
 
+// writeSubFile writes a subfile from the reader to disk
 func writeSubFile(r io.Reader, fp string, n int64) error {
 	f, err := os.Create(fp)
 	if err != nil {

@@ -2,10 +2,12 @@ module go.sia.tech/SiaFoundation/skyrecover
 
 go 1.19
 
-require gitlab.com/SkynetLabs/skyd v1.6.9
+require (
+	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da
+	gitlab.com/SkynetLabs/skyd v1.6.9
+)
 
 require (
-	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
 	github.com/bmizerany/pat v0.0.0-20170815010413-6226ea591a40 // indirect
 	github.com/dchest/threefish v0.0.0-20120919164726-3ecf4c494abf // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
