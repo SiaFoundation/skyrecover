@@ -64,21 +64,23 @@ func parseMetadata(skykeyDB *skykey.SkykeyManager, skylink, metaPath string) (sk
 		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to parse skylink: %w", err)
 	}
 
-	// read the base sector
-	var sector [sectorSize]byte
-	if _, err := io.ReadFull(f, sector[:]); err != nil {
-		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to read base sector: %w", err)
-	}
-
 	offset, length, err := sl.OffsetAndFetchSize()
 	if err != nil {
 		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to get offset and fetch size: %w", err)
 	}
 
+	if _, err := f.Seek(int64(offset), io.SeekStart); err != nil {
+		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to seek to offset %v: %w", offset, err)
+	}
+
+	baseSector := make([]byte, length)
+	if _, err := io.ReadFull(f, baseSector); err != nil {
+		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to read base sector: %w", err)
+	}
+
 	// if the layout is encrypted, decrypt it first
-	if skymodules.IsEncryptedBaseSector(sector[:]) {
+	if skymodules.IsEncryptedBaseSector(baseSector) {
 		var layout skymodules.SkyfileLayout
-		baseSector := sector[offset : offset+length]
 		layout.Decode(baseSector)
 
 		// get the nonce to be used for getting private-id skykeys, and for
@@ -137,12 +139,12 @@ func parseMetadata(skykeyDB *skykey.SkykeyManager, skylink, metaPath string) (sk
 		layout.KeyData = keyData
 
 		// overwrite the base sector layout with the decrypted layout
-		copy(sector[:skymodules.SkyfileLayoutSize], layout.Encode())
+		copy(baseSector[:skymodules.SkyfileLayoutSize], layout.Encode())
 	}
 
 	// attempt to parse the metadata from the base sector. May return a
 	// recursive base sector error.
-	_, _, meta, _, _, err := skymodules.ParseSkyfileMetadata(sector[offset : offset+length])
+	_, _, meta, _, _, err := skymodules.ParseSkyfileMetadata(baseSector)
 	if err == nil {
 		return meta, nil
 	} else if err != nil && !strings.Contains(err.Error(), "can't use skymodules.ParseSkyfileMetadata to parse recursive base sector - use renter.ParseSkyfileMetadata instead") {
@@ -150,14 +152,14 @@ func parseMetadata(skykeyDB *skykey.SkykeyManager, skylink, metaPath string) (sk
 	}
 
 	// Since its a recursive base sector, only parse the layout
-	layout := skymodules.ParseSkyfileLayout(sector[:])
+	layout := skymodules.ParseSkyfileLayout(baseSector)
 
 	// get the size of the payload and the fanout offset in the metadata file
 	payloadSize := layout.FanoutSize + layout.MetadataSize
 	translatedOffset, _ := skymodules.TranslateBaseSectorExtensionOffset(0, payloadSize, payloadSize, uint64(sectorSize-skymodules.SkyfileLayoutSize))
 
 	// seek to the start of the JSON payload and parse it
-	if _, err := f.Seek(int64(translatedOffset+layout.FanoutSize), io.SeekCurrent); err != nil {
+	if _, err := f.Seek(int64(sectorSize+translatedOffset+layout.FanoutSize), io.SeekStart); err != nil {
 		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to seek to metadata pos %v: %w", translatedOffset+layout.FanoutSize, err)
 	} else if err := json.NewDecoder(f).Decode(&meta); err != nil {
 		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to decode metadata: %w", err)
@@ -183,6 +185,14 @@ func main() {
 	meta, err := parseMetadata(skykeyDB, *skylink, *basePath)
 	if err != nil {
 		log.Fatalln("failed to parse base sectors:", err)
+	}
+
+	// check that the -extended file is the correct size
+	stat, err := os.Stat(*extendedPath)
+	if err != nil {
+		log.Fatalln("failed to stat extended file:", err)
+	} else if n := stat.Size(); n != int64(meta.Length) {
+		log.Fatalf("extended file is the wrong size, expected %v bytes but got %v bytes", meta.Length, n)
 	}
 
 	// open the -extended file
