@@ -15,14 +15,14 @@ import (
 
 const sectorSize = 1 << 22 // 4 MiB
 
-func writeSubFile(r io.Reader, fp string) error {
+func writeSubFile(r io.Reader, fp string, n int64) error {
 	f, err := os.Create(fp)
 	if err != nil {
 		return fmt.Errorf("failed to create file %v: %w", fp, err)
 	}
 	defer f.Close()
 
-	_, err = io.Copy(f, r)
+	_, err = io.CopyN(f, r, n)
 	return err
 }
 
@@ -61,9 +61,8 @@ func parseMetadata(metaPath string) (skymodules.SkyfileMetadata, error) {
 		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to seek to metadata: %w", err)
 	}
 
-	// parse the JSON
-	lr := io.LimitReader(f, int64(payloadSize))
-	if err := json.NewDecoder(lr).Decode(&meta); err != nil {
+	// parse the JSON payload
+	if err := json.NewDecoder(f).Decode(&meta); err != nil {
 		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to decode metadata: %w", err)
 	}
 	return meta, nil
@@ -74,35 +73,46 @@ func main() {
 	extendedPath := os.Args[2]
 	outputPath := os.Args[3]
 
+	// parse the skyfile metadata from the -base file
 	meta, err := parseMetadata(metadataPath)
 	if err != nil {
 		log.Fatalln("failed to parse base sectors:", err)
 	}
 
+	// if there are no subfiles, the -extended file should be the full raw data
+	if len(meta.Subfiles) == 0 {
+		log.Fatalln("no subfiles found")
+	}
+
+	// open the -extended file
 	ef, err := os.Open(extendedPath)
 	if err != nil {
 		log.Fatalln("failed to open extended sector:", err)
 	}
 
-	if len(meta.Subfiles) == 0 {
-		log.Fatalln("no subfiles found")
-	}
-
-	log.Printf("Found %v subfiles", len(meta.Subfiles))
+	// create a hasher to calculate the checksum of each file
 	h := sha256.New()
+	tr := io.TeeReader(ef, h)
+	var i int
+	n := len(meta.Subfiles)
 	for _, subfile := range meta.Subfiles {
-		log.Printf("Found file %v %v bytes at %v offset", subfile.Filename, subfile.Len, subfile.Offset)
+		// increment the counter
+		i++
+		// reset the hasher
 		h.Reset()
+
+		log.Printf("Found file %v (%v/%v) - %v bytes at %v offset", subfile.Filename, i, n, subfile.Len, subfile.Offset)
+
+		// seek to the file offset in the -extended file
 		if _, err := ef.Seek(int64(subfile.Offset), io.SeekStart); err != nil {
 			log.Fatalln("failed to seek to subfile:", err)
 		}
 
-		lr := io.LimitReader(ef, int64(subfile.Len))
-		tr := io.TeeReader(lr, h)
-		out := filepath.Join(outputPath, subfile.Filename)
-		if err := writeSubFile(tr, out); err != nil {
+		// write the subfile to disk and calculate its sha256 checksum
+		outPath := filepath.Join(outputPath, subfile.Filename)
+		if err := writeSubFile(tr, outPath, int64(subfile.Len)); err != nil {
 			log.Fatalln("failed to write subfile:", err)
 		}
-		log.Printf("%v %v bytes %x checksum", out, subfile.Len, h.Sum(nil))
+		log.Printf("%v %v bytes %x checksum", outPath, subfile.Len, h.Sum(nil))
 	}
 }
