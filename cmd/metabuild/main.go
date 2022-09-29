@@ -66,7 +66,7 @@ func parseMetadata(skykeyDB *skykey.SkykeyManager, skylink, metaPath string) (sk
 		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to read base sector: %w", err)
 	}
 
-	offset, len, err := sl.OffsetAndFetchSize()
+	offset, length, err := sl.OffsetAndFetchSize()
 	if err != nil {
 		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to get offset and fetch size: %w", err)
 	}
@@ -74,7 +74,7 @@ func parseMetadata(skykeyDB *skykey.SkykeyManager, skylink, metaPath string) (sk
 	// if the layout is encrypted, we need to decrypt it first
 	if skymodules.IsEncryptedBaseSector(sector[:]) {
 		var layout skymodules.SkyfileLayout
-		baseSector := sector[offset : offset+len]
+		baseSector := sector[offset : offset+length]
 		layout.Decode(baseSector)
 
 		// Get the nonce to be used for getting private-id skykeys, and for deriving the
@@ -137,7 +137,7 @@ func parseMetadata(skykeyDB *skykey.SkykeyManager, skylink, metaPath string) (sk
 
 	// attempt to parse the metadata from the base sector. May return a
 	// recursive base sector error.
-	_, _, meta, _, _, err := skymodules.ParseSkyfileMetadata(sector[offset : offset+len])
+	_, _, meta, _, _, err := skymodules.ParseSkyfileMetadata(sector[offset : offset+length])
 	if err == nil {
 		return meta, nil
 	} else if err != nil && !strings.Contains(err.Error(), "can't use skymodules.ParseSkyfileMetadata to parse recursive base sector - use renter.ParseSkyfileMetadata instead") {
