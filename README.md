@@ -13,5 +13,5 @@ go build -o bin/ ./cmd/metabuild
 skyc renter download /var/skynet/testdir ~/testdir-base
 skyc renter download /var/skynet/testdir-extended ~/testdir-extended
 # reconstruct the data. outputs each subfile to ~/results
-./bin/metabuild ~/testdir-base ~/testdir-extended ~/results
+./bin/metabuild --skynetdir ~/.skynet --skylink AABl3BTAQL0hoUQW942X1kNBQRDUdBIX-FixOdGz3oNHeA --base ~/testdir-base --extended ~/testdir-extended --output ~/results
 ```
