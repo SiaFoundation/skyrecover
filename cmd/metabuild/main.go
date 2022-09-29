@@ -71,25 +71,25 @@ func parseMetadata(skykeyDB *skykey.SkykeyManager, skylink, metaPath string) (sk
 		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to get offset and fetch size: %w", err)
 	}
 
-	// if the layout is encrypted, we need to decrypt it first
+	// if the layout is encrypted, decrypt it first
 	if skymodules.IsEncryptedBaseSector(sector[:]) {
 		var layout skymodules.SkyfileLayout
 		baseSector := sector[offset : offset+length]
 		layout.Decode(baseSector)
 
-		// Get the nonce to be used for getting private-id skykeys, and for deriving the
-		// file-specific skykey.
+		// get the nonce to be used for getting private-id skykeys, and for
+		// deriving the file-specific skykey
 		nonce := make([]byte, chacha.XNonceSize)
 		copy(nonce[:], layout.KeyData[skykey.SkykeyIDLen:skykey.SkykeyIDLen+chacha.XNonceSize])
 
-		// Grab the key ID from the layout.
+		// grab the key ID from the layout
 		var keyID skykey.SkykeyID
 		copy(keyID[:], layout.KeyData[:skykey.SkykeyIDLen])
 
-		// Try to get the skykey associated with that ID.
+		// try to get the skykey associated with that ID
 		masterSkykey, err := skykeyDB.KeyByID(keyID)
-		// If the ID is unknown, use the key ID as an encryption identifier and try
-		// finding the associated skykey.
+		// if the ID is unknown, use the key ID as an encryption identifier and
+		// try finding the associated skykey.
 		if strings.Contains(err.Error(), skykey.ErrNoSkykeysWithThatID.Error()) {
 			masterSkykey, err = findMatchingSkyKey(skykeyDB, keyID[:], nonce)
 		}
@@ -97,19 +97,19 @@ func parseMetadata(skykeyDB *skykey.SkykeyManager, skylink, metaPath string) (sk
 			return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to get skykey: %w", err)
 		}
 
-		// Derive the file-specific key.
+		// derive the file-specific key
 		fileSkykey, err := masterSkykey.SubkeyWithNonce(nonce)
 		if err != nil {
 			return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to derive file-specific skykey: %w", err)
 		}
 
-		// Derive the base sector subkey and use it to decrypt the base sector.
+		// derive the base sector subkey and use it to decrypt the base sector
 		baseSectorKey, err := fileSkykey.DeriveSubkey(skymodules.BaseSectorNonceDerivation[:])
 		if err != nil {
 			return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to derive base sector subkey: %w", err)
 		}
 
-		// Get the cipherkey.
+		// get the cipherkey
 		ck, err := baseSectorKey.CipherKey()
 		if err != nil {
 			return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to get cipherkey: %w", err)
@@ -120,16 +120,17 @@ func parseMetadata(skykeyDB *skykey.SkykeyManager, skylink, metaPath string) (sk
 			return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to decrypt base sector: %w", err)
 		}
 
-		// Save the visible-by-default fields of the baseSector's layout.
+		// save the visible-by-default fields of the baseSector's layout
 		version, cipherType := layout.Version, layout.CipherType
-		keyData := append([]byte(nil), layout.KeyData[:]...)
+		var keyData [64]byte
+		copy(keyData[:], layout.KeyData[:])
 
-		// Decode the now decrypted layout.
+		// decode the now decrypted layout
 		layout.Decode(baseSector)
 		// reset the visible-by-default fields
 		layout.Version = version
 		layout.CipherType = cipherType
-		copy(layout.KeyData[:], keyData)
+		layout.KeyData = keyData
 
 		// overwrite the base sector layout with the decrypted layout
 		copy(sector[:skymodules.SkyfileLayoutSize], layout.Encode())
@@ -147,22 +148,14 @@ func parseMetadata(skykeyDB *skykey.SkykeyManager, skylink, metaPath string) (sk
 	// Since its a recursive base sector, only parse the layout
 	layout := skymodules.ParseSkyfileLayout(sector[:])
 
-	// Since its a recursive base sector, only parse the layout
-	//layout := skymodules.ParseSkyfileLayout(sector[:])
-	// Get the size of the payload
+	// get the size of the payload and the fanout offset in the metadata file
 	payloadSize := layout.FanoutSize + layout.MetadataSize
-	maxSize := uint64(sectorSize - skymodules.SkyfileLayoutSize)
+	translatedOffset, _ := skymodules.TranslateBaseSectorExtensionOffset(0, payloadSize, payloadSize, uint64(sectorSize-skymodules.SkyfileLayoutSize))
 
-	// calculate the fanout offset in the meta file
-	translatedOffset, _ := skymodules.TranslateBaseSectorExtensionOffset(0, payloadSize, payloadSize, maxSize)
-
-	// seek to the start of the JSON payload
+	// seek to the start of the JSON payload and parse it
 	if _, err := f.Seek(int64(translatedOffset+layout.FanoutSize), io.SeekCurrent); err != nil {
 		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to seek to metadata pos %v: %w", translatedOffset+layout.FanoutSize, err)
-	}
-
-	// parse the JSON payload
-	if err := json.NewDecoder(f).Decode(&meta); err != nil {
+	} else if err := json.NewDecoder(f).Decode(&meta); err != nil {
 		return skymodules.SkyfileMetadata{}, fmt.Errorf("failed to decode metadata: %w", err)
 	}
 	return meta, nil
