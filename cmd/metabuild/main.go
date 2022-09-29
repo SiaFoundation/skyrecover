@@ -203,6 +203,7 @@ func main() {
 			log.Fatalln("failed to write file:", err)
 		}
 		log.Printf("Recovered file %v (%v/%v) %v bytes %x checksum", meta.Filename, 1, 1, meta.Length, h.Sum(nil))
+		return
 	}
 
 	log.Printf("Found %v files", len(meta.Subfiles))
