@@ -1,11 +1,14 @@
 package main
 
 import (
+	"crypto/md5"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"hash"
 	"io"
 	"log"
 	"os"
@@ -173,6 +176,7 @@ func main() {
 	basePath := flag.String("base", "", "path to base sector file")
 	extendedPath := flag.String("extended", "", "path to extended sector file")
 	outputDir := flag.String("output", ".", "output directory")
+	checksumAlgo := flag.String("algo", "sha256", "checksum algorithm to use")
 	flag.Parse()
 
 	// open the skykey database
@@ -201,8 +205,19 @@ func main() {
 		log.Fatalln("failed to open extended sector:", err)
 	}
 
-	// pipe the -extended data to a hasher to calculate the SHA256 checksum
-	h := sha256.New()
+	// pipe the -extended data to a hasher to calculate the checksum
+	var h hash.Hash
+	switch strings.ToLower(*checksumAlgo) {
+	case "sha256":
+		h = sha256.New()
+	case "sha512":
+		h = sha512.New()
+	case "md5":
+		h = md5.New()
+	default:
+		log.Fatalln("unknown checksum algorithm:", *checksumAlgo)
+	}
+
 	tr := io.TeeReader(ef, h)
 
 	// if there are no subfiles, the -extended file should be the full raw data
