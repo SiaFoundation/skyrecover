@@ -1,4 +1,4 @@
-module github.com/n8maninger/skyrecover
+module go.sia.tech/SiaFoundation/skyrecover
 
 go 1.19
 

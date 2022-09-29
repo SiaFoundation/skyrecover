@@ -1,6 +1,5 @@
 # skyrecover
-Attempts to rebuild skynet subfiles from downloaded metadata. Does not currently
-support recursive base sectors.
+Attempts to rebuild skynet subfiles from downloaded metadata.
 
 # Building
 
