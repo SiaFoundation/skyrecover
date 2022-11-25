@@ -30,5 +30,5 @@ go build -o bin/ ./cmd/skyscan
 
 ### Usage
 ```
-skyscan --checksum e9cd47a43126020d93981a859eef38950eaf5d13559132d97d4c5f3281d2a251 --len 342518 --input ~/Downloads/image_download --output ~/Downloads/output.png
+skyscan --algo sha256 --checksum e9cd47a43126020d93981a859eef38950eaf5d13559132d97d4c5f3281d2a251 --len 342518 --input ~/Downloads/image_download --output ~/Downloads/output.png
 ```
