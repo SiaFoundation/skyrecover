@@ -5,7 +5,6 @@ Utilties to recover lost skyd data
 Reconstructs Skyfiles from a local base sector and -extended file 
 
 ### Building
-
 ```
 go build -o bin/ ./cmd/metabuild
 ```
@@ -23,7 +22,6 @@ metabuild --skynetdir ~/.skynet --skylink AABl3BTAQL0hoUQW942X1kNBQRDUdBIX-FixOd
 Scans a base sector or extended file for a file matching a file size and checksum.
 
 ### Building
-
 ```
 go build -o bin/ ./cmd/skyscan
 ```
@@ -31,4 +29,17 @@ go build -o bin/ ./cmd/skyscan
 ### Usage
 ```
 skyscan --algo sha256 --checksum e9cd47a43126020d93981a859eef38950eaf5d13559132d97d4c5f3281d2a251 --len 342518 --input ~/Downloads/image_download --output ~/Downloads/output.png
+```
+
+## extractmeta
+Extracts metadata from a .sia file
+
+### Building
+```
+go build -o bin/ ./cmd/extractmeta
+```
+
+### Usage
+```
+extractmeta ~/image_download.sia
 ```

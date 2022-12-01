@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da
 	gitlab.com/SkynetLabs/skyd v1.6.9
+	go.sia.tech/siad v1.5.9
 )
 
 require (
@@ -26,7 +27,7 @@ require (
 	gitlab.com/NebulousLabs/ratelimit v0.0.0-20200811080431-99b8f0768b2e // indirect
 	gitlab.com/NebulousLabs/siamux v0.0.2-0.20220819160410-b3fb3772a220 // indirect
 	gitlab.com/NebulousLabs/threadgroup v0.0.0-20200608151952-38921fbef213 // indirect
-	go.sia.tech/siad v1.5.9 // indirect
+	gitlab.com/NebulousLabs/writeaheadlog v0.0.0-20200618142844-c59a90f49130 // indirect
 	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa // indirect
 	golang.org/x/net v0.0.0-20220809184613-07c6da5e1ced // indirect
 	golang.org/x/sys v0.0.0-20220808155132-1c4a2a72c664 // indirect

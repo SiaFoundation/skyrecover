@@ -376,6 +376,7 @@ gitlab.com/NebulousLabs/siamux v0.0.2-0.20220819160410-b3fb3772a220/go.mod h1:at
 gitlab.com/NebulousLabs/threadgroup v0.0.0-20200527092543-afa01960408c/go.mod h1:av52iTyGuPtGU+GMcqfGtZu2vxhIjPgrxvIwVYelEvs=
 gitlab.com/NebulousLabs/threadgroup v0.0.0-20200608151952-38921fbef213 h1:owERlKtUEFTPQ897iiqWPOuWBdq7BYqPxDOCgEZnbN4=
 gitlab.com/NebulousLabs/threadgroup v0.0.0-20200608151952-38921fbef213/go.mod h1:vIutAvl7lmJqLVYTCBY5WDdJomP+V74At8LCeEYoH8w=
+gitlab.com/NebulousLabs/writeaheadlog v0.0.0-20200618142844-c59a90f49130 h1:0hiQX3a4rmdu/duDhrRxl80zYHZoJDkSbTEFwSlAc74=
 gitlab.com/NebulousLabs/writeaheadlog v0.0.0-20200618142844-c59a90f49130/go.mod h1:SxigdS5Q1ui+OMgGAXt1E/Fg3RB6PvKXMov2O3gvIzs=
 gitlab.com/SkynetLabs/skyd v1.6.9 h1:A/4G9ALPS91UxjvbLub86+rWz0MVqZ1SJsZ49iAUVgM=
 gitlab.com/SkynetLabs/skyd v1.6.9/go.mod h1:qRERN62SodP5KDIaxM5rj8Rp8/RfmGqKscjXNdtWC9c=
