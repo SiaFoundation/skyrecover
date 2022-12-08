@@ -58,15 +58,9 @@ var (
 			}
 
 			inputPath := args[0]
-			f, err := os.Open(inputPath)
+			sf, err := siafile.Load(inputPath)
 			if err != nil {
-				log.Fatalln("failed to open metadata file:", err)
-			}
-			defer f.Close()
-
-			var sf siafile.SiaFile
-			if err := json.NewDecoder(f).Decode(&sf); err != nil {
-				log.Fatalln("failed to decode metadata file:", err)
+				log.Fatalln("failed to parse skyfile:", err)
 			}
 
 			// check that we have contracts with all hosts listed in the file
@@ -100,6 +94,10 @@ var (
 					}
 					log.Printf(" - %v %v last seen %v", host.PublicKey, host.NetAddress, time.Since(host.LastSuccessScan))
 				}
+			}
+
+			if len(availableHosts) == 0 {
+				log.Fatalln("no hosts available")
 			}
 
 			log.Printf("Checking file health on %v hosts...", len(availableHosts))
