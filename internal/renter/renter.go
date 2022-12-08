@@ -53,7 +53,7 @@ var (
 
 func (r *Renter) FormDownloadContract(hostKey rhp.PublicKey, downloadAmount, duration uint64, w Wallet) (ContractMeta, error) {
 	siacentralClient := apisdkgo.NewSiaClient()
-	block, err := siacentralClient.GetLatestBlock()
+	block, err := siacentralClient.GetChainIndex()
 	if err != nil {
 		return ContractMeta{}, fmt.Errorf("failed to get latest block: %w", err)
 	}
@@ -186,7 +186,7 @@ func (r *Renter) load() error {
 
 func (r *Renter) HostContract(hostID rhp.PublicKey) (ContractMeta, error) {
 	siaCentralClient := apisdkgo.NewSiaClient()
-	block, err := siaCentralClient.GetLatestBlock()
+	tip, err := siaCentralClient.GetChainIndex()
 	if err != nil {
 		return ContractMeta{}, fmt.Errorf("failed to get latest block: %w", err)
 	}
@@ -195,7 +195,7 @@ func (r *Renter) HostContract(hostID rhp.PublicKey) (ContractMeta, error) {
 	meta, ok := r.contracts[hostID]
 	r.mu.Unlock()
 	// check that a contract exists and has not expired
-	if !ok || meta.ExpirationHeight <= block.Height {
+	if !ok || meta.ExpirationHeight <= tip.Height {
 		return ContractMeta{}, ErrNoContract
 	}
 	return meta, nil
@@ -203,7 +203,7 @@ func (r *Renter) HostContract(hostID rhp.PublicKey) (ContractMeta, error) {
 
 func (r *Renter) Hosts() ([]rhp.PublicKey, error) {
 	siaCentralClient := apisdkgo.NewSiaClient()
-	block, err := siaCentralClient.GetLatestBlock()
+	tip, err := siaCentralClient.GetChainIndex()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest block: %w", err)
 	}
@@ -212,7 +212,7 @@ func (r *Renter) Hosts() ([]rhp.PublicKey, error) {
 	defer r.mu.Unlock()
 	var hosts []rhp.PublicKey
 	for _, meta := range r.contracts {
-		if meta.ExpirationHeight > block.Height {
+		if meta.ExpirationHeight > tip.Height {
 			hosts = append(hosts, meta.HostKey)
 		}
 	}

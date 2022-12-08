@@ -40,7 +40,7 @@ func init() {
 	contractsFormCmd.Flags().Uint64Var(&contractDownloadSize, "download-size", contractDownloadSize, "contract download size")
 	contractsFormCmd.Flags().Uint64Var(&contractDuration, "duration", contractDuration, "contract duration")
 
-	contractsCmd.AddCommand(contractsFormCmd)
+	contractsCmd.AddCommand(contractsFormCmd, contractsHostsCmd)
 	walletCmd.AddCommand(walletDistributeCmd)
 
 	rootCmd.AddCommand(walletCmd, contractsCmd, healthCheckCmd)

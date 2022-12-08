@@ -49,7 +49,7 @@ func (sw *SingleAddressWallet) Balance() (types.Currency, error) {
 
 // SpendableUTXOs returns a list of spendable UTXOs.
 func (sw *SingleAddressWallet) SpendableUTXOs() (spendable []SiacoinElement, _ error) {
-	block, err := siaCentralClient.GetLatestBlock()
+	tip, err := siaCentralClient.GetChainIndex()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get consensus state: %w", err)
 	}
@@ -82,7 +82,7 @@ func (sw *SingleAddressWallet) SpendableUTXOs() (spendable []SiacoinElement, _ e
 		var outputID types.SiacoinOutputID
 		if _, err := hex.Decode(outputID[:], []byte(utxo.OutputID)); err != nil {
 			return nil, fmt.Errorf("failed to decode output id: %w", err)
-		} else if sw.used[outputID] || unconfirmedSpent[outputID] || utxo.MaturityHeight > block.Height {
+		} else if sw.used[outputID] || unconfirmedSpent[outputID] || utxo.MaturityHeight > tip.Height {
 			continue
 		}
 		spendable = append(spendable, SiacoinElement{
@@ -156,7 +156,7 @@ func (sw *SingleAddressWallet) FundTransaction(txn *types.Transaction, amount ty
 
 // SignTransaction signs txn with the wallet's private key.
 func (sw *SingleAddressWallet) SignTransaction(txn *types.Transaction, toSign []crypto.Hash, cf types.CoveredFields) error {
-	block, err := siaCentralClient.GetLatestBlock()
+	tip, err := siaCentralClient.GetChainIndex()
 	if err != nil {
 		return fmt.Errorf("failed to get consensus state: %w", err)
 	}
@@ -167,7 +167,7 @@ func (sw *SingleAddressWallet) SignTransaction(txn *types.Transaction, toSign []
 			CoveredFields:  cf,
 			PublicKeyIndex: 0,
 		})
-		sigHash := txn.SigHash(i, types.BlockHeight(block.Height))
+		sigHash := txn.SigHash(i, types.BlockHeight(tip.Height))
 		txn.TransactionSignatures[i].Signature = ed25519.Sign(sw.priv, sigHash[:])
 	}
 	return nil
