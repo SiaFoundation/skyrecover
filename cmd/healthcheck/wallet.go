@@ -69,7 +69,7 @@ var (
 			}
 			defer release()
 
-			log.Printf("Creating %v outputs of %v each", n, outputAmount.HumanString())
+			log.Printf("Creating %v outputs of %v each", count, outputAmount.HumanString())
 			siaCentralClient := apisdkgo.NewSiaClient()
 			if err := siaCentralClient.BroadcastTransactionSet([]types.Transaction{txn}); err != nil {
 				log.Fatalln("failed to broadcast transaction:", err)
