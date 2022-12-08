@@ -63,11 +63,12 @@ var (
 			}
 
 			for i, hostPub := range hosts {
-				log.Printf("Forming contract with host %v (%v/%v)", hostPub, i+1, len(hosts))
 				// if a contract already exists, skip
 				if _, err := r.HostContract(hostPub); err == nil && !force {
+					log.Printf("Skipping host %v, contract exists", hostPub)
 					continue
 				}
+				log.Printf("Forming contract with host %v (%v/%v)", hostPub, i+1, len(hosts))
 
 				if _, err := r.FormDownloadContract(hostPub, 10*(1<<30), 144*14, w); err != nil {
 					log.Println(" WARNING: failed to update contract:", err)
