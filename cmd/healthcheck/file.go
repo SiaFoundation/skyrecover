@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/siacentral/apisdkgo"
 	"github.com/spf13/cobra"
 	"go.sia.tech/siad/crypto"
 	"go.sia.tech/skyrecover/internal/renter"
@@ -64,6 +65,39 @@ var (
 			var sf siafile.SiaFile
 			if err := json.NewDecoder(f).Decode(&sf); err != nil {
 				log.Fatalln("failed to decode metadata file:", err)
+			}
+
+			// check that we have contracts with all hosts listed in the file
+			var missingHosts []rhp.PublicKey
+			fileHosts := make(map[rhp.PublicKey]bool)
+			for _, chunk := range sf.Chunks {
+				for _, piece := range chunk.Pieces {
+					for _, p := range piece {
+						var hostPub rhp.PublicKey
+						if err := hostPub.UnmarshalText([]byte(p.HostKey)); err != nil {
+							log.Fatalf("failed to decode host key %v: %v", p.HostKey, err)
+						}
+						fileHosts[hostPub] = true
+					}
+				}
+			}
+
+			for host := range fileHosts {
+				if _, err := r.HostContract(host); err != nil {
+					missingHosts = append(missingHosts, host)
+				}
+			}
+
+			if len(missingHosts) > 0 {
+				client := apisdkgo.NewSiaClient()
+				log.Println("missing contracts for hosts listed in the sia file:")
+				for _, hostPub := range missingHosts {
+					host, err := client.GetHost(hostPub.String())
+					if err != nil {
+						log.Fatalln("failed to get host info:", err)
+					}
+					log.Printf(" - %v %v last seen %v", host.PublicKey, host.NetAddress, time.Since(host.LastSuccessScan))
+				}
 			}
 
 			log.Printf("Checking file health on %v hosts...", len(availableHosts))

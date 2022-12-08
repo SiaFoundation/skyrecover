@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da
 	github.com/hdevalence/ed25519consensus v0.0.0-20220222234857-c00d1f31bab3
-	github.com/siacentral/apisdkgo v0.2.2
+	github.com/siacentral/apisdkgo v0.2.3
 	github.com/spf13/cobra v1.1.3
 	gitlab.com/NebulousLabs/encoding v0.0.0-20200604091946-456c3dc907fe
 	gitlab.com/SkynetLabs/skyd v1.6.9

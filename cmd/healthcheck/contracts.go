@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.sia.tech/siad/types"
 	"go.sia.tech/skyrecover/internal/renter"
-	rhpv2 "go.sia.tech/skyrecover/internal/rhp/v2"
+	"go.sia.tech/skyrecover/internal/rhp/v2"
 )
 
 var (
@@ -19,8 +19,8 @@ var (
 	}
 
 	contractsFormCmd = &cobra.Command{
-		Use:   "form",
-		Short: "form contracts with all available hosts, hosts that are already contracted with will be skipped",
+		Use:   "form [host keys]...",
+		Short: "form contracts with hosts. If no hosts are specified, contracts will be formed with all hosts that meet the criteria",
 		Run: func(cmd *cobra.Command, args []string) {
 			w := mustLoadWallet()
 			r, err := renter.New(dataDir)
@@ -28,39 +28,49 @@ var (
 				log.Fatalln("failed to initialize contractor:", err)
 			}
 
-			siaCentralClient := apisdkgo.NewSiaClient()
-			filter := make(sia.HostFilter)
-			filter.WithAcceptingContracts(true)
-			filter.WithMinUptime(0.75)
-			filter.WithMaxContractPrice(types.SiacoinPrecision.Div64(2))
+			var hosts []rhp.PublicKey
+			if len(args) == 0 {
+				siaCentralClient := apisdkgo.NewSiaClient()
+				filter := make(sia.HostFilter)
+				filter.WithAcceptingContracts(true)
+				filter.WithMinUptime(0.75)
+				filter.WithMaxContractPrice(types.SiacoinPrecision.Div64(2))
 
-			// check for contracts with all potential hosts and form new contracts if
-			// necessary
-			for i := 0; true; i++ {
-				hosts, err := siaCentralClient.GetActiveHosts(filter, i, 500)
-				if err != nil {
-					log.Fatalln("failed to get active hosts:", err)
+				for i := 0; true; i++ {
+					activeHosts, err := siaCentralClient.GetActiveHosts(filter, i, 500)
+					if err != nil {
+						log.Fatalln("failed to get active hosts:", err)
+					} else if len(activeHosts) == 0 {
+						break
+					}
+
+					for _, host := range activeHosts {
+						var hostPub rhp.PublicKey
+						if err := hostPub.UnmarshalText([]byte(host.PublicKey)); err != nil {
+							log.Fatalln("failed to unmarshal host public key:", err)
+						}
+						hosts = append(hosts, hostPub)
+					}
+				}
+			}
+
+			for _, key := range args {
+				var hostPub rhp.PublicKey
+				if err := hostPub.UnmarshalText([]byte(key)); err != nil {
+					log.Fatalln("failed to unmarshal host public key:", err)
+				}
+				hosts = append(hosts, hostPub)
+			}
+
+			for i, hostPub := range hosts {
+				log.Printf("Forming contract with host %v (%v/%v)", hostPub, i+1, len(hosts))
+				// if a contract already exists, skip
+				if _, err := r.HostContract(hostPub); err == nil {
+					continue
 				}
 
-				if len(hosts) == 0 {
-					break
-				}
-
-				for i, host := range hosts {
-					log.Printf("Updating contract with host %v %v (%v/%v)", host.PublicKey, host.NetAddress, i, len(hosts))
-					var hostPub rhpv2.PublicKey
-					if err := hostPub.UnmarshalText([]byte(host.PublicKey)); err != nil {
-						log.Fatalf("failed to decode host key %v: %v", host.PublicKey, err)
-					}
-
-					// if a contract already exists, skip
-					if _, err := r.HostContract(hostPub); err == nil {
-						continue
-					}
-
-					if _, err := r.FormDownloadContract(hostPub, 10*(1<<30), 144*14, w); err != nil {
-						log.Println(" WARNING: failed to update contract:", err)
-					}
+				if _, err := r.FormDownloadContract(hostPub, 10*(1<<30), 144*14, w); err != nil {
+					log.Println(" WARNING: failed to update contract:", err)
 				}
 			}
 		},
