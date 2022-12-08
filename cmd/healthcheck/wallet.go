@@ -1,144 +1,92 @@
 package main
 
 import (
-	"crypto/ed25519"
-	"encoding/hex"
 	"fmt"
-	"reflect"
-	"sync"
+	"log"
+	"os"
+	"strconv"
 
 	"github.com/siacentral/apisdkgo"
-	"go.sia.tech/renterd/wallet"
-	"go.sia.tech/siad/crypto"
+	"github.com/spf13/cobra"
 	"go.sia.tech/siad/types"
-	"lukechampine.com/frand"
+	"go.sia.tech/skyrecover/internal/wallet"
 )
 
-var siaCentralClient = apisdkgo.NewSiaClient()
-
-type (
-	singleAddressWallet struct {
-		priv ed25519.PrivateKey
-		addr types.UnlockHash
-
-		mu   sync.Mutex
-		used map[types.SiacoinOutputID]bool
-	}
-)
-
-func (w *singleAddressWallet) Address() types.UnlockHash {
-	return w.addr
-}
-
-func (w *singleAddressWallet) Balance() (types.Currency, error) {
-	resp, err := siaCentralClient.GetAddressBalance(0, 0, w.addr.String())
-	return resp.UnspentSiacoins, err
-}
-
-func (w *singleAddressWallet) FundTransaction(txn *types.Transaction, amount types.Currency) ([]crypto.Hash, func(), error) {
-	if amount.IsZero() {
-		return nil, nil, nil
-	}
-
-	block, err := siaCentralClient.GetLatestBlock()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get consensus state: %w", err)
-	}
-
-	resp, err := siaCentralClient.GetAddressBalance(0, 0, w.addr.String())
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get address balance: %w", err)
-	}
-	utxos := resp.UnspentSiacoinOutputs
-	// choose outputs randomly
-	frand.Shuffle(len(utxos), reflect.Swapper(utxos))
-
-	// get unconfirmed spent utxos
-	unconfirmedSpent := make(map[types.SiacoinOutputID]bool)
-	for _, txn := range resp.UnconfirmedTransactions {
-		for _, input := range txn.SiacoinInputs {
-			var outputID types.SiacoinOutputID
-			if _, err := hex.Decode(outputID[:], []byte(input.OutputID)); err != nil {
-				return nil, nil, fmt.Errorf("failed to decode output id: %w", err)
+var (
+	walletCmd = &cobra.Command{
+		Use:   "wallet",
+		Short: "get the wallet address and balance",
+		Run: func(cmd *cobra.Command, args []string) {
+			w := mustLoadWallet()
+			balance, err := w.Balance()
+			if err != nil {
+				log.Fatalln("failed to get wallet balance:", err)
 			}
-			unconfirmedSpent[outputID] = true
-		}
+
+			log.Println("Wallet Address:", w.Address())
+			log.Println("Wallet Balance:", balance.HumanString())
+		},
 	}
 
-	// lock the used mutex
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	walletDistributeCmd = &cobra.Command{
+		Use:   "redistribute <number of outputs> <output amount>",
+		Short: "redistributes UTXOs to better form contracts",
+		Run: func(cmd *cobra.Command, args []string) {
+			if len(args) != 2 {
+				cmd.Usage()
+				os.Exit(1)
+			}
 
-	var outputSum types.Currency
-	var toSign []crypto.Hash
-	for _, utxo := range utxos {
-		var outputID types.SiacoinOutputID
-		if _, err := hex.Decode(outputID[:], []byte(utxo.OutputID)); err != nil {
-			return nil, nil, fmt.Errorf("failed to decode output id: %w", err)
-		} else if w.used[outputID] || unconfirmedSpent[outputID] || utxo.MaturityHeight > block.Height {
-			continue
-		}
+			count, err := strconv.ParseUint(args[0], 10, 64)
+			if err != nil {
+				log.Fatalln("failed to parse output count:", err)
+			}
+			hastings, err := types.ParseCurrency(args[1])
+			if err != nil {
+				log.Fatalln("failed to parse output hastings:", err)
+			}
+			var outputAmount types.Currency
+			if _, err := fmt.Sscan(hastings, &outputAmount); err != nil {
+				log.Fatalln("failed to parse output amount:", err)
+			}
 
-		w.used[outputID] = true
-		toSign = append(toSign, crypto.Hash(outputID))
-		outputSum = outputSum.Add(utxo.Value)
-		txn.SiacoinInputs = append(txn.SiacoinInputs, types.SiacoinInput{
-			ParentID: outputID,
-			UnlockConditions: types.UnlockConditions{
-				PublicKeys: []types.SiaPublicKey{
-					{Algorithm: types.SignatureEd25519, Key: w.priv.Public().(ed25519.PublicKey)},
-				},
-				SignaturesRequired: 1,
-			},
-		})
-		if outputSum.Cmp(amount) >= 0 {
-			break
-		}
+			w := mustLoadWallet()
+			balance, err := w.Balance()
+			if err != nil {
+				log.Fatalln("failed to get wallet balance:", err)
+			}
+
+			n, err := balance.Div(outputAmount).Uint64()
+			if err != nil {
+				log.Fatalln("failed to get number of outputs:", err)
+			} else if n < count {
+				log.Println("not enough funds to redistribute")
+			}
+
+			txn, release, err := w.Redistribute(count, outputAmount)
+			if err != nil {
+				log.Fatalln("failed to redistribute funds:", err)
+			}
+			defer release()
+
+			log.Printf("Creating %v outputs of %v each", n, outputAmount.HumanString())
+			siaCentralClient := apisdkgo.NewSiaClient()
+			if err := siaCentralClient.BroadcastTransactionSet([]types.Transaction{txn}); err != nil {
+				log.Fatalln("failed to broadcast transaction:", err)
+			}
+			log.Printf("Transaction %v broadcast", txn.ID())
+		},
 	}
+)
 
-	if outputSum.Cmp(amount) < 0 {
-		return nil, nil, fmt.Errorf("not enough funds to fund transaction: %v < %v", outputSum, amount)
-	} else if outputSum.Cmp(amount) > 0 {
-		txn.SiacoinOutputs = append(txn.SiacoinOutputs, types.SiacoinOutput{
-			Value:      outputSum.Sub(amount),
-			UnlockHash: w.addr,
-		})
+func mustLoadWallet() *wallet.SingleAddressWallet {
+	recoveryPhrase := os.Getenv("RECOVERY_PHRASE")
+	if recoveryPhrase == "" {
+		log.Fatalln("RECOVERY_PHRASE environment variable not set")
 	}
-	return toSign, func() {
-		w.mu.Lock()
-		defer w.mu.Unlock()
-		for _, id := range toSign {
-			delete(w.used, types.SiacoinOutputID(id))
-		}
-	}, nil
-}
-
-func (sw *singleAddressWallet) SignTransaction(txn *types.Transaction, toSign []crypto.Hash, cf types.CoveredFields) error {
-	block, err := siaCentralClient.GetLatestBlock()
+	wallet, err := wallet.New(recoveryPhrase)
 	if err != nil {
-		return fmt.Errorf("failed to get consensus state: %w", err)
+		log.Fatalln("failed to initialize wallet:", err)
 	}
-	for _, id := range toSign {
-		i := len(txn.TransactionSignatures)
-		txn.TransactionSignatures = append(txn.TransactionSignatures, types.TransactionSignature{
-			ParentID:       id,
-			CoveredFields:  cf,
-			PublicKeyIndex: 0,
-		})
-		sigHash := txn.SigHash(i, types.BlockHeight(block.Height))
-		txn.TransactionSignatures[i].Signature = ed25519.Sign(sw.priv, sigHash[:])
-	}
-	return nil
-}
-
-func initWallet(recoveryPhrase string) (*singleAddressWallet, error) {
-	key, err := wallet.KeyFromPhrase(recoveryPhrase)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create seed: %w", err)
-	}
-	return &singleAddressWallet{
-		priv: ed25519.PrivateKey(key),
-		addr: wallet.StandardAddress(key.PublicKey()),
-		used: make(map[types.SiacoinOutputID]bool),
-	}, nil
+	return wallet
 }

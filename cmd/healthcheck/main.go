@@ -1,86 +1,53 @@
 package main
 
 import (
-	"encoding/json"
-	"flag"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 
-	rhpv2 "go.sia.tech/skyrecover/internal/rhp/v2"
-)
-
-type (
-	ChunkHealth struct {
-		PiecesAvailable int `json:"piecesAvailable"`
-		MinPieces       int `json:"minPieces"`
-	}
+	"github.com/spf13/cobra"
 )
 
 var (
-	dir            string
-	inputFile      string
-	recoveryPhrase string
+	dataDir string
+
+	contractDownloadSize uint64 = 1 << 30 // 1 GiB of downloaded data
+	contractDuration     uint64 = 144 * 7 // 1 week
+
+	rootCmd = &cobra.Command{
+		Use:   "healthcheck",
+		Short: "",
+		Run:   func(cmd *cobra.Command, args []string) {},
+	}
 )
 
 func init() {
-	flag.StringVar(&dir, "dir", "", "directory for contracts and private key")
-	flag.StringVar(&inputFile, "input", "", "input file to extract metadata from")
-	flag.StringVar(&recoveryPhrase, "phrase", "", "recovery phrase for the wallet")
-	flag.Parse()
+	log.SetFlags(0)
+
+	defaultDataDir := "."
+	switch runtime.GOOS {
+	case "windows":
+		defaultDataDir = filepath.Join(os.Getenv("LOCALAPPDATA"), "renterc")
+	case "darwin":
+		defaultDataDir = filepath.Join(os.Getenv("HOME"), "Library", "Application Support", "renterc")
+	default:
+		defaultDataDir = filepath.Join(os.Getenv("HOME"), ".local/renterc")
+	}
+
+	contractsFormCmd.Flags().Uint64Var(&contractDownloadSize, "download-size", contractDownloadSize, "contract download size")
+	contractsFormCmd.Flags().Uint64Var(&contractDuration, "duration", contractDuration, "contract duration")
+
+	contractsCmd.AddCommand(contractsFormCmd)
+	walletCmd.AddCommand(walletDistributeCmd)
+
+	rootCmd.AddCommand(walletCmd, contractsCmd, healthCheckCmd)
+
+	rootCmd.PersistentFlags().StringVarP(&dataDir, "dir", "d", defaultDataDir, "data directory")
 }
 
 func main() {
-	wallet, err := initWallet(recoveryPhrase)
-	if err != nil {
-		log.Fatal("failed to initialize wallet:", err)
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatalln(err)
 	}
-
-	balance, err := wallet.Balance()
-	if err != nil {
-		log.Fatal("failed to get wallet balance:", err)
-	}
-
-	log.Println("Wallet Address:", wallet.Address())
-	log.Println("Wallet Balance:", balance.HumanString())
-
-	renter, err := newRenter(dir, wallet)
-	if err != nil {
-		log.Fatal("failed to initialize contractor:", err)
-	}
-
-	log.Println("Loaded renter with", len(renter.contracts), "contracts")
-
-	f, err := os.Open(inputFile)
-	if err != nil {
-		log.Fatalln("failed to open metadata file:", err)
-	}
-	defer f.Close()
-
-	var sf SiaFile
-	if err := json.NewDecoder(f).Decode(&sf); err != nil {
-		log.Fatalln("failed to decode metadata file:", err)
-	}
-
-	for i, chunk := range sf.Chunks {
-		health := ChunkHealth{
-			MinPieces: int(sf.DataPieces),
-		}
-		log.Printf("Checking chunk %v", i)
-		for _, piece := range chunk.Pieces {
-			for _, p := range piece {
-				var hostPub rhpv2.PublicKey
-				if err := hostPub.UnmarshalText([]byte(p.HostKey)); err != nil {
-					log.Fatalf("failed to decode host key %v: %v", p.HostKey, err)
-				}
-
-				if err := renter.VerifySector(rhpv2.Hash256(p.MerkleRoot), hostPub); err != nil {
-					log.Printf("INFO: unable to retrieve sector %v from host %v: %v", p.MerkleRoot, hostPub, err)
-				} else {
-					health.PiecesAvailable++
-					log.Printf("INFO: sector %v available", p.MerkleRoot)
-				}
-			}
-		}
-	}
-
 }

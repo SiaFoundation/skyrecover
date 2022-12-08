@@ -134,12 +134,11 @@ func (b *objBuffer) copyN(r io.Reader, n uint64) error {
 	if b.err != nil {
 		return b.err
 	}
-	b.lr = io.LimitedReader{R: r, N: int64(n)}
-	read, err := b.buf.ReadFrom(&b.lr)
+	read, err := io.CopyN(&b.buf, r, int64(n))
 	if err != nil {
 		b.err = err
 	} else if read != int64(n) {
-		b.err = io.ErrUnexpectedEOF
+		b.err = fmt.Errorf("read %v bytes, expected %v: %w", read, n, io.ErrUnexpectedEOF)
 	}
 	return b.err
 }

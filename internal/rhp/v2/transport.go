@@ -337,6 +337,7 @@ func (t *Transport) RawResponse(maxLen uint64) (*ResponseReader, error) {
 	}
 	t.inbuf.reset()
 	if err := t.inbuf.copyN(t.conn, 8); err != nil {
+		err = fmt.Errorf("couldn't read message size: %v", err)
 		t.setErr(err)
 		return nil, err
 	}
@@ -351,6 +352,7 @@ func (t *Transport) RawResponse(maxLen uint64) (*ResponseReader, error) {
 	t.inbuf.reset()
 	t.inbuf.grow(t.aead.NonceSize())
 	if err := t.inbuf.copyN(t.conn, uint64(t.aead.NonceSize())); err != nil {
+		err = fmt.Errorf("couldn't read nonce: %w", err)
 		t.setErr(err)
 		return nil, err
 	}

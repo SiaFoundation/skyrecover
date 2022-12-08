@@ -2,12 +2,11 @@ module go.sia.tech/skyrecover
 
 go 1.19
 
-replace go.sia.tech/renterd => ../../SiaFoundation/renterd
-
 require (
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da
 	github.com/hdevalence/ed25519consensus v0.0.0-20220222234857-c00d1f31bab3
 	github.com/siacentral/apisdkgo v0.2.2
+	github.com/spf13/cobra v1.1.3
 	gitlab.com/NebulousLabs/encoding v0.0.0-20200604091946-456c3dc907fe
 	gitlab.com/SkynetLabs/skyd v1.6.9
 	go.sia.tech/renterd v0.0.0-20221205102301-90c186786876
@@ -22,8 +21,10 @@ require (
 	github.com/bmizerany/pat v0.0.0-20170815010413-6226ea591a40 // indirect
 	github.com/dchest/threefish v0.0.0-20120919164726-3ecf4c494abf // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.1.0 // indirect
 	github.com/klauspost/reedsolomon v1.10.0 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/tus/tusd v1.9.0 // indirect
 	gitlab.com/NebulousLabs/bolt v1.4.4 // indirect
 	gitlab.com/NebulousLabs/entropy-mnemonics v0.0.0-20181018051301-7532f67e3500 // indirect

@@ -2,6 +2,7 @@ package rhp
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"math"
 	"math/big"
@@ -162,8 +163,13 @@ func PrepareContractRenewal(currentRevision types.FileContractRevision, renterKe
 }
 
 // RPCFormContract forms a contract with a host.
-func RPCFormContract(t *Transport, cs ConsensusState, renterKey PrivateKey, hostKey PublicKey, txnSet []types.Transaction) (_ Contract, _ []types.Transaction, err error) {
+func RPCFormContract(ctx context.Context, t *Transport, cs ConsensusState, renterKey PrivateKey, hostKey PublicKey, txnSet []types.Transaction) (_ Contract, _ []types.Transaction, err error) {
 	defer wrapErr(&err, "FormContract")
+
+	deadline, ok := ctx.Deadline()
+	if ok {
+		t.conn.SetDeadline(deadline)
+	}
 
 	// strip our signatures before sending
 	parents, txn := txnSet[:len(txnSet)-1], txnSet[len(txnSet)-1]
