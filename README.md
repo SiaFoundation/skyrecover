@@ -48,8 +48,6 @@ extractmeta ~/image_download.sia
 Checks the health of a sia file exported using the `extractmeta` utility. Health check needs contracts to function, use
 the sub-commands to send Siacoins and form contracts.
 
-```
-
 ### Building
 ```
 go build -o bin/ ./cmd/healthcheck
@@ -57,21 +55,21 @@ go build -o bin/ ./cmd/healthcheck
 
 ### Get wallet address
 ```
-RECOVERY_PHRASE="board learn true grain combine pole talent country soon stock juice client" healthcheck wallet
+RECOVERY_PHRASE="board learn true grain combine pole talent country soon stock juice client" healthcheck -d ~/recovery-data wallet
 ```
 
 ### Redistribute UTXOs
 ```
-RECOVERY_PHRASE="board learn true grain combine pole talent country soon stock juice client" healthcheck wallet redistribute 10 100SC
+RECOVERY_PHRASE="board learn true grain combine pole talent country soon stock juice client" healthcheck -d ~/recovery-data wallet redistribute 10 100SC
 ```
 
 ### Form contracts
 The utility will attempt to form small download-only contracts with every working host on the network. This will take a while.
 ```
-RECOVERY_PHRASE="board learn true grain combine pole talent country soon stock juice client" healthcheck contracts form
+RECOVERY_PHRASE="board learn true grain combine pole talent country soon stock juice client" healthcheck -d ~/recovery-data contracts form
 ```
 
 ### Check health
 ```
-healthcheck check ~/photos.sia.json
+healthcheck -d ~/recovery-data check ~/photos.sia.json
 ```
