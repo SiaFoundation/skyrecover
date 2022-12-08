@@ -11,6 +11,7 @@ import (
 
 var (
 	dataDir string
+	force   bool
 
 	contractDownloadSize uint64 = 1 << 30 // 1 GiB of downloaded data
 	contractDuration     uint64 = 144 * 7 // 1 week
@@ -35,6 +36,7 @@ func init() {
 		defaultDataDir = filepath.Join(os.Getenv("HOME"), ".local/renterc")
 	}
 
+	contractsFormCmd.Flags().BoolVar(&force, "force", force, "force contract formation")
 	contractsFormCmd.Flags().Uint64Var(&contractDownloadSize, "download-size", contractDownloadSize, "contract download size")
 	contractsFormCmd.Flags().Uint64Var(&contractDuration, "duration", contractDuration, "contract duration")
 

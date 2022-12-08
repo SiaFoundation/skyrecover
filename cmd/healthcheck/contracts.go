@@ -65,7 +65,7 @@ var (
 			for i, hostPub := range hosts {
 				log.Printf("Forming contract with host %v (%v/%v)", hostPub, i+1, len(hosts))
 				// if a contract already exists, skip
-				if _, err := r.HostContract(hostPub); err == nil {
+				if _, err := r.HostContract(hostPub); err == nil && !force {
 					continue
 				}
 
