@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -56,7 +57,8 @@ var (
 				log.Fatalln("failed to get available hosts:", err)
 			}
 
-			f, err := os.Open(args[0])
+			inputPath := args[0]
+			f, err := os.Open(inputPath)
 			if err != nil {
 				log.Fatalln("failed to open metadata file:", err)
 			}
@@ -162,12 +164,25 @@ var (
 				}
 			}
 
+			outputPath := filepath.Join(dataDir, filepath.Base(inputPath)+".health.json")
+			output, err := os.Create(outputPath)
+			if err != nil {
+				log.Fatalln("failed to create output file:", err)
+			}
+			defer output.Close()
+
 			health.Recoverable = !unhealthy
-			enc := json.NewEncoder(os.Stdout)
+			enc := json.NewEncoder(output)
 			enc.SetIndent("", "  ")
 			if err := enc.Encode(health); err != nil {
 				log.Fatalln("failed to encode health report:", err)
 			}
+			if health.Recoverable {
+				log.Println("File is recoverable")
+			} else {
+				log.Println("File is not recoverable")
+			}
+			log.Printf("Health report written to %v", outputPath)
 		},
 	}
 )
