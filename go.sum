@@ -361,6 +361,8 @@ github.com/siacentral/apisdkgo v0.2.2 h1:e9HjRBU6GuHaOoudPZXenGeh1mg/522sJnM4STY
 github.com/siacentral/apisdkgo v0.2.2/go.mod h1:hlrt6prRR/XiJcRgQn5r73Yx22FyPhSjuq8mIusVnXs=
 github.com/siacentral/apisdkgo v0.2.3 h1:x/dkZtIaJQ4OaeIKjIAhQgDt/3UPkTWJU8EV6hrMtFQ=
 github.com/siacentral/apisdkgo v0.2.3/go.mod h1:hlrt6prRR/XiJcRgQn5r73Yx22FyPhSjuq8mIusVnXs=
+github.com/siacentral/apisdkgo v0.2.4 h1:/Q4OObwk6O84XOBLmPFq7QMyIl1Q8JEF+2XNrs84tsQ=
+github.com/siacentral/apisdkgo v0.2.4/go.mod h1:hlrt6prRR/XiJcRgQn5r73Yx22FyPhSjuq8mIusVnXs=
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrfsX/uA88=

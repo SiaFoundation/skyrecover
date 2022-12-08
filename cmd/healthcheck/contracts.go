@@ -33,7 +33,7 @@ var (
 				siaCentralClient := apisdkgo.NewSiaClient()
 				filter := make(sia.HostFilter)
 				filter.WithAcceptingContracts(true)
-				filter.WithMinUptime(0.75)
+				filter.WithMinUptime(0.6)
 				filter.WithMaxContractPrice(types.SiacoinPrecision.Div64(2))
 
 				for i := 0; true; i++ {
