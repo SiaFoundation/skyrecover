@@ -20,7 +20,7 @@ var (
 
 	contractsFormCmd = &cobra.Command{
 		Use:   "form",
-		Short: "form contracts with all available hosts",
+		Short: "form contracts with all available hosts, hosts that are already contracted with will be skipped",
 		Run: func(cmd *cobra.Command, args []string) {
 			w := mustLoadWallet()
 			r, err := renter.New(dataDir)
@@ -39,7 +39,7 @@ var (
 			for i := 0; true; i++ {
 				hosts, err := siaCentralClient.GetActiveHosts(filter, i, 500)
 				if err != nil {
-					log.Fatal("failed to get active hosts:", err)
+					log.Fatalln("failed to get active hosts:", err)
 				}
 
 				if len(hosts) == 0 {

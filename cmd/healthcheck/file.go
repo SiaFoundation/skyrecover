@@ -24,8 +24,9 @@ type (
 	}
 
 	ChunkHealth struct {
-		MinPieces uint32          `json:"minPieces"`
-		Pieces    [][]PieceHealth `json:"pieces"`
+		MinPieces       uint32          `json:"minPieces"`
+		AvailablePieces uint32          `json:"availablePieces"`
+		Pieces          [][]PieceHealth `json:"pieces"`
 	}
 
 	FileHealth struct {
@@ -46,12 +47,12 @@ var (
 
 			r, err := renter.New(dataDir)
 			if err != nil {
-				log.Fatal("failed to initialize renter:", err)
+				log.Fatalln("failed to initialize renter:", err)
 			}
 
 			availableHosts, err := r.Hosts()
 			if err != nil {
-				log.Fatal("failed to get available hosts:", err)
+				log.Fatalln("failed to get available hosts:", err)
 			}
 
 			f, err := os.Open(args[0])
@@ -105,26 +106,33 @@ var (
 				var chunkHealth ChunkHealth
 				chunkHealth.MinPieces = sf.DataPieces
 				for _, piece := range chunk.Pieces {
+					available := true
 					var pieceHealth []PieceHealth
 					for _, p := range piece {
 						if len(sectorAvailability[p.MerkleRoot]) == 0 {
-							unhealthy = true
+							available = false
 						}
 						pieceHealth = append(pieceHealth, PieceHealth{
 							MerkleRoot: p.MerkleRoot,
 							Hosts:      sectorAvailability[p.MerkleRoot],
 						})
 					}
+					if available {
+						chunkHealth.AvailablePieces++
+					}
 					chunkHealth.Pieces = append(chunkHealth.Pieces, pieceHealth)
 				}
 				health.Chunks = append(health.Chunks, chunkHealth)
+				if chunkHealth.AvailablePieces < chunkHealth.MinPieces {
+					unhealthy = true
+				}
 			}
 
 			health.Recoverable = !unhealthy
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 			if err := enc.Encode(health); err != nil {
-				log.Fatal("failed to encode health report:", err)
+				log.Fatalln("failed to encode health report:", err)
 			}
 		},
 	}
