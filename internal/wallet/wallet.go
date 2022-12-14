@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/siacentral/apisdkgo"
 	"gitlab.com/NebulousLabs/encoding"
@@ -25,8 +26,12 @@ type (
 		priv ed25519.PrivateKey
 		addr types.UnlockHash
 
-		mu   sync.Mutex
-		used map[types.SiacoinOutputID]bool
+		close chan struct{}
+
+		mu            sync.Mutex
+		currentHeight uint64
+		unspent       []SiacoinElement
+		used          map[types.SiacoinOutputID]bool
 	}
 
 	SiacoinElement struct {
@@ -35,6 +40,56 @@ type (
 		UnlockHash types.UnlockHash
 	}
 )
+
+func (sw *SingleAddressWallet) refresh() error {
+	client := apisdkgo.NewSiaClient()
+
+	tip, err := client.GetChainIndex()
+	if err != nil {
+		return fmt.Errorf("failed to get consensus state: %w", err)
+	}
+
+	resp, err := siaCentralClient.GetAddressBalance(0, 0, sw.addr.String())
+	if err != nil {
+		return fmt.Errorf("failed to get address balance: %w", err)
+	}
+	utxos := resp.UnspentSiacoinOutputs
+
+	var filtered []SiacoinElement
+	for _, utxo := range utxos {
+		var outputID types.SiacoinOutputID
+		if _, err := hex.Decode(outputID[:], []byte(utxo.OutputID)); err != nil {
+			return fmt.Errorf("failed to decode output id: %w", err)
+		}
+
+		if utxo.MaturityHeight < tip.Height {
+			continue
+		}
+
+		filtered = append(filtered, SiacoinElement{
+			ID:         outputID,
+			Value:      utxo.Value,
+			UnlockHash: sw.addr,
+		})
+	}
+
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
+	sw.currentHeight = tip.Height
+	// update the wallet's spendable utxos
+	sw.unspent = filtered
+	// update the used utxos from the wallet's unconfirmed transactions
+	for _, txn := range resp.UnconfirmedTransactions {
+		for _, input := range txn.SiacoinInputs {
+			var outputID types.SiacoinOutputID
+			if _, err := hex.Decode(outputID[:], []byte(input.OutputID)); err != nil {
+				return fmt.Errorf("failed to decode output id: %w", err)
+			}
+			sw.used[outputID] = true
+		}
+	}
+	return nil
+}
 
 // Address returns the wallet's address.
 func (sw *SingleAddressWallet) Address() types.UnlockHash {
@@ -49,48 +104,17 @@ func (sw *SingleAddressWallet) Balance() (types.Currency, error) {
 
 // SpendableUTXOs returns a list of spendable UTXOs.
 func (sw *SingleAddressWallet) SpendableUTXOs() (spendable []SiacoinElement, _ error) {
-	tip, err := siaCentralClient.GetChainIndex()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get consensus state: %w", err)
-	}
-
-	resp, err := siaCentralClient.GetAddressBalance(0, 0, sw.addr.String())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get address balance: %w", err)
-	}
-	utxos := resp.UnspentSiacoinOutputs
-	// choose outputs randomly
-	frand.Shuffle(len(utxos), reflect.Swapper(utxos))
-
-	// get unconfirmed spent utxos
-	unconfirmedSpent := make(map[types.SiacoinOutputID]bool)
-	for _, txn := range resp.UnconfirmedTransactions {
-		for _, input := range txn.SiacoinInputs {
-			var outputID types.SiacoinOutputID
-			if _, err := hex.Decode(outputID[:], []byte(input.OutputID)); err != nil {
-				return nil, fmt.Errorf("failed to decode output id: %w", err)
-			}
-			unconfirmedSpent[outputID] = true
-		}
-	}
-
-	// check for unused spendable outputs
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
 
-	for _, utxo := range utxos {
-		var outputID types.SiacoinOutputID
-		if _, err := hex.Decode(outputID[:], []byte(utxo.OutputID)); err != nil {
-			return nil, fmt.Errorf("failed to decode output id: %w", err)
-		} else if sw.used[outputID] || unconfirmedSpent[outputID] || utxo.MaturityHeight > tip.Height {
+	for _, utxo := range sw.unspent {
+		if sw.used[utxo.ID] {
 			continue
 		}
-		spendable = append(spendable, SiacoinElement{
-			ID:         outputID,
-			Value:      utxo.Value,
-			UnlockHash: sw.addr,
-		})
+		spendable = append(spendable, utxo)
 	}
+	// choose outputs randomly
+	frand.Shuffle(len(spendable), reflect.Swapper(spendable))
 	return
 }
 
@@ -156,10 +180,9 @@ func (sw *SingleAddressWallet) FundTransaction(txn *types.Transaction, amount ty
 
 // SignTransaction signs txn with the wallet's private key.
 func (sw *SingleAddressWallet) SignTransaction(txn *types.Transaction, toSign []crypto.Hash, cf types.CoveredFields) error {
-	tip, err := siaCentralClient.GetChainIndex()
-	if err != nil {
-		return fmt.Errorf("failed to get consensus state: %w", err)
-	}
+	sw.mu.Lock()
+	currentHeight := sw.currentHeight
+	sw.mu.Unlock()
 	for _, id := range toSign {
 		i := len(txn.TransactionSignatures)
 		txn.TransactionSignatures = append(txn.TransactionSignatures, types.TransactionSignature{
@@ -167,7 +190,7 @@ func (sw *SingleAddressWallet) SignTransaction(txn *types.Transaction, toSign []
 			CoveredFields:  cf,
 			PublicKeyIndex: 0,
 		})
-		sigHash := txn.SigHash(i, types.BlockHeight(tip.Height))
+		sigHash := txn.SigHash(i, types.BlockHeight(currentHeight))
 		txn.TransactionSignatures[i].Signature = ed25519.Sign(sw.priv, sigHash[:])
 	}
 	return nil
@@ -303,9 +326,26 @@ func New(recoveryPhrase string) (*SingleAddressWallet, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create seed: %w", err)
 	}
-	return &SingleAddressWallet{
+	w := &SingleAddressWallet{
 		priv: ed25519.PrivateKey(key),
 		addr: wallet.StandardAddress(key.PublicKey()),
 		used: make(map[types.SiacoinOutputID]bool),
-	}, nil
+	}
+	if err := w.refresh(); err != nil {
+		return nil, fmt.Errorf("failed to refresh wallet: %w", err)
+	}
+	ticker := time.NewTicker(10 * time.Second)
+	go func() {
+		for {
+			select {
+			case <-w.close:
+				ticker.Stop()
+				return
+			case <-ticker.C:
+			}
+
+			w.refresh()
+		}
+	}()
+	return w, nil
 }
