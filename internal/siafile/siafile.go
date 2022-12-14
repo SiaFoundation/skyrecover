@@ -15,12 +15,20 @@ import (
 )
 
 type (
+	partialChunkInfo struct {
+		ID     modules.CombinedChunkID `json:"id"`     // ID of the combined chunk
+		Index  uint64                  `json:"index"`  // Index of the combined chunk within partialsSiaFile
+		Offset uint64                  `json:"offset"` // Offset of partial chunk within combined chunk
+		Length uint64                  `json:"length"` // Length of partial chunk within combined chunk
+		Status uint8                   `json:"status"` // Status of combined chunk
+	}
+
 	fileMetadata struct {
 		UniqueID string `json:"uniqueid"` // unique identifier for file
 
 		PagesPerChunk uint8    `json:"pagesperchunk"` // number of pages reserved for storing a chunk.
 		Version       [16]byte `json:"version"`       // version of the sia file format used
-		FileSize      int64    `json:"filesize"`      // total size of the file
+		FileSize      uint64   `json:"filesize"`      // total size of the file
 		PieceSize     uint64   `json:"piecesize"`     // size of a single piece of the file
 
 		// The following fields are the offsets for data that is written to disk
@@ -51,6 +59,17 @@ type (
 		ErasureCodeType   [4]byte `json:"erasurecodetype"`
 		ErasureCodeParams [8]byte `json:"erasurecodeparams"`
 
+		// Fields for encryption
+		MasterKey      []byte            `json:"masterkey"` // masterkey used to encrypt pieces
+		MasterKeyType  crypto.CipherType `json:"masterkeytype"`
+		SharingKey     []byte            `json:"sharingkey"` // key used to encrypt shared pieces
+		SharingKeyType crypto.CipherType `json:"sharingkeytype"`
+
+		// Fields for partial uploads
+		DisablePartialChunk bool               `json:"disablepartialchunk"` // determines whether the file should be treated like legacy files
+		PartialChunks       []partialChunkInfo `json:"partialchunks"`       // information about the partial chunk.
+		HasPartialChunk     bool               `json:"haspartialchunk"`     // indicates whether this file is supposed to have a partial chunk or not
+
 		// Skylink tracking. If this siafile is known to have sectors of any
 		// skyfiles, those skyfiles will be listed here. It should be noted that
 		// a single siafile can be responsible for tracking many skyfiles.
@@ -67,11 +86,17 @@ type (
 	}
 
 	SiaFile struct {
-		FileSize     int64  `json:"filesize"`  // total size of the file
+		FileSize     uint64 `json:"filesize"`  // total size of the file
 		PieceSize    uint64 `json:"piecesize"` // size of a single piece of the file
 		EncoderType  uint32 `json:"encodertype"`
 		DataPieces   uint32 `json:"datapieces"`
 		ParityPieces uint32 `json:"paritypieces"`
+
+		// Fields for encryption
+		MasterKey      []byte `json:"masterkey"` // masterkey used to encrypt pieces
+		MasterKeyType  string `json:"masterkeytype"`
+		SharingKey     []byte `json:"sharingkey"` // key used to encrypt shared pieces
+		SharingKeyType string `json:"sharingkeytype"`
 
 		// Skylink tracking. If this siafile is known to have sectors of any
 		// skyfiles, those skyfiles will be listed here. It should be noted that
@@ -82,7 +107,7 @@ type (
 	}
 )
 
-func initErasureCoder(ecType, dataPieces, parityPieces uint32) (modules.ErasureCoder, error) {
+func InitErasureCoder(ecType, dataPieces, parityPieces uint32) (modules.ErasureCoder, error) {
 	switch ecType {
 	case 1:
 		return modules.NewRSCode(int(dataPieces), int(parityPieces))
@@ -113,6 +138,10 @@ func Load(fp string) (sf SiaFile, _ error) {
 	sf.EncoderType = binary.BigEndian.Uint32(meta.ErasureCodeType[:])
 	sf.DataPieces = binary.LittleEndian.Uint32(meta.ErasureCodeParams[:4])
 	sf.ParityPieces = binary.LittleEndian.Uint32(meta.ErasureCodeParams[4:])
+	sf.MasterKey = meta.MasterKey
+	sf.MasterKeyType = meta.MasterKeyType.String()
+	sf.SharingKey = meta.SharingKey
+	sf.SharingKeyType = meta.SharingKeyType.String()
 
 	// read the raw host table data
 	hostKeys := (meta.ChunkOffset - meta.PubKeyTableOffset) / (16 + 8 + 32 + 1)
@@ -127,7 +156,7 @@ func Load(fp string) (sf SiaFile, _ error) {
 		}
 	}
 
-	ec, err := initErasureCoder(sf.EncoderType, sf.DataPieces, sf.ParityPieces)
+	ec, err := InitErasureCoder(sf.EncoderType, sf.DataPieces, sf.ParityPieces)
 	if err != nil {
 		return SiaFile{}, fmt.Errorf("failed to init erasure coder: %w", err)
 	}
