@@ -42,14 +42,29 @@ type (
 		renterKey rhp.PrivateKey
 		dir       string
 
-		mu        sync.Mutex
-		contracts map[rhp.PublicKey]ContractMeta
+		close chan struct{}
+
+		mu            sync.Mutex
+		currentHeight uint64
+		contracts     map[rhp.PublicKey]ContractMeta
 	}
 )
 
 var (
 	ErrNoContract = errors.New("no contract formed")
 )
+
+func (r *Renter) refreshHeight() error {
+	client := apisdkgo.NewSiaClient()
+	tip, err := client.GetChainIndex()
+	if err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.currentHeight = tip.Height
+	r.mu.Unlock()
+	return nil
+}
 
 func (r *Renter) FormDownloadContract(hostKey rhp.PublicKey, downloadAmount, duration uint64, w Wallet) (ContractMeta, error) {
 	siacentralClient := apisdkgo.NewSiaClient()
@@ -137,9 +152,14 @@ func (r *Renter) save() error {
 		RenterKey: r.renterKey,
 		Contracts: make([]ContractMeta, 0, len(r.contracts)),
 	}
+	r.mu.Lock()
 	for _, contract := range r.contracts {
+		if contract.ExpirationHeight < r.currentHeight {
+			continue
+		}
 		meta.Contracts = append(meta.Contracts, contract)
 	}
+	r.mu.Unlock()
 
 	tmpFile := filepath.Join(r.dir, "contracts.json.tmp")
 	outputFile := filepath.Join(r.dir, "contracts.json")
@@ -177,42 +197,41 @@ func (r *Renter) load() error {
 		return fmt.Errorf("failed to decode contracts: %w", err)
 	}
 	r.renterKey = meta.RenterKey
+	r.mu.Lock()
 	r.contracts = make(map[rhp.PublicKey]ContractMeta)
 	for _, contract := range meta.Contracts {
+		if contract.ExpirationHeight <= r.currentHeight {
+			continue
+		}
 		r.contracts[contract.HostKey] = contract
+	}
+	r.mu.Unlock()
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("failed to close contracts file: %w", err)
+	} else if err := r.save(); err != nil { // prune expired contracts
+		return fmt.Errorf("failed to prune contracts: %w", err)
 	}
 	return nil
 }
 
 func (r *Renter) HostContract(hostID rhp.PublicKey) (ContractMeta, error) {
-	siaCentralClient := apisdkgo.NewSiaClient()
-	tip, err := siaCentralClient.GetChainIndex()
-	if err != nil {
-		return ContractMeta{}, fmt.Errorf("failed to get latest block: %w", err)
-	}
-
 	r.mu.Lock()
 	meta, ok := r.contracts[hostID]
+	currentHeight := r.currentHeight
 	r.mu.Unlock()
 	// check that a contract exists and has not expired
-	if !ok || meta.ExpirationHeight <= tip.Height {
+	if !ok || meta.ExpirationHeight <= currentHeight {
 		return ContractMeta{}, ErrNoContract
 	}
 	return meta, nil
 }
 
 func (r *Renter) Hosts() ([]rhp.PublicKey, error) {
-	siaCentralClient := apisdkgo.NewSiaClient()
-	tip, err := siaCentralClient.GetChainIndex()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get latest block: %w", err)
-	}
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var hosts []rhp.PublicKey
 	for _, meta := range r.contracts {
-		if meta.ExpirationHeight > tip.Height {
+		if meta.ExpirationHeight > r.currentHeight {
 			hosts = append(hosts, meta.HostKey)
 		}
 	}
@@ -248,6 +267,16 @@ func (r *Renter) NewSession(ctx context.Context, hostPub rhp.PublicKey) (*rhp.Se
 	return rhp.DialSession(ctx, host.NetAddress, contract.HostKey, contract.ID, r.renterKey)
 }
 
+func (r *Renter) Close() {
+	select {
+	case <-r.close:
+		return
+	default:
+		close(r.close)
+	}
+	r.save()
+}
+
 func New(dir string) (*Renter, error) {
 	r := &Renter{
 		renterKey: rhp.GeneratePrivateKey(),
@@ -255,6 +284,26 @@ func New(dir string) (*Renter, error) {
 
 		contracts: make(map[rhp.PublicKey]ContractMeta),
 	}
+	// get the current block height
+	if err := r.refreshHeight(); err != nil {
+		return nil, fmt.Errorf("failed to get block height: %w", err)
+	}
+	// batch height requests
+	t := time.NewTicker(15 * time.Second)
+	go func() {
+		for {
+			select {
+			case <-r.close:
+				t.Stop()
+				return
+			case <-t.C:
+			}
+
+			// update the renter's block height, ignore the error
+			r.refreshHeight()
+		}
+	}()
+
 	// renter key and contracts will be overwritten if the file exists
 	if err := r.load(); !errors.Is(err, os.ErrNotExist) && err != nil {
 		return nil, fmt.Errorf("failed to load contracts: %w", err)
