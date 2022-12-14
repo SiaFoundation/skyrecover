@@ -91,7 +91,7 @@ var (
 				}
 				log.Printf("Forming contract with host %v (%v/%v)", hostPub, i+1, len(hosts))
 
-				if _, err := r.FormDownloadContract(hostPub, 10*(1<<30), 144*14, w); err != nil {
+				if _, err := r.FormDownloadContract(hostPub, 10*(1<<30), 144*30, w); err != nil {
 					log.Println(" WARNING: failed to update contract:", err)
 				}
 			}
