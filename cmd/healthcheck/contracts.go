@@ -78,7 +78,7 @@ var (
 			for _, key := range args {
 				var hostPub rhp.PublicKey
 				if err := hostPub.UnmarshalText([]byte(key)); err != nil {
-					log.Fatalln("failed to unmarshal host public key:", err)
+					log.Fatalf("failed to unmarshal host public key %v: %v", key, err)
 				}
 				hosts = append(hosts, hostPub)
 			}

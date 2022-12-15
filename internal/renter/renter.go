@@ -226,7 +226,7 @@ func (r *Renter) HostContract(hostID rhp.PublicKey) (ContractMeta, error) {
 	return meta, nil
 }
 
-func (r *Renter) Hosts() ([]rhp.PublicKey, error) {
+func (r *Renter) Hosts() []rhp.PublicKey {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var hosts []rhp.PublicKey
@@ -235,7 +235,7 @@ func (r *Renter) Hosts() ([]rhp.PublicKey, error) {
 			hosts = append(hosts, meta.HostKey)
 		}
 	}
-	return hosts, nil
+	return hosts
 }
 
 func (r *Renter) Contracts() (contracts []ContractMeta) {
@@ -245,6 +245,13 @@ func (r *Renter) Contracts() (contracts []ContractMeta) {
 		contracts = append(contracts, meta)
 	}
 	return contracts
+}
+
+func (r *Renter) RemoveHostContract(hostID rhp.PublicKey) error {
+	r.mu.Lock()
+	delete(r.contracts, hostID)
+	r.mu.Unlock()
+	return r.save()
 }
 
 // NewSession initializes a new rhp session with the given host and locks the
