@@ -376,7 +376,7 @@ var (
 				}
 
 				if err := ec.Recover(recoveredPieces, chunkSize, output); err != nil {
-					log.Fatalf("failed to recover chunk %v: %v", chunkIdx, err)
+					log.Fatalf("failed to recover chunk %v: %v", chunkIdx+1, err)
 				}
 				log.Printf("Recovered chunk %v/%v", chunkIdx+1, len(sf.Chunks))
 			}
