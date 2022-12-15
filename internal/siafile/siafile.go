@@ -12,6 +12,7 @@ import (
 	"go.sia.tech/siad/crypto"
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/modules/renter/filesystem/siafile"
+	"go.sia.tech/skyrecover/internal/rhp/v2"
 )
 
 type (
@@ -77,8 +78,8 @@ type (
 	}
 
 	Piece struct {
-		MerkleRoot crypto.Hash // merkle root of the piece
-		HostKey    string      // public key of the host
+		MerkleRoot crypto.Hash   // merkle root of the piece
+		HostKey    rhp.PublicKey // public key of the host
 	}
 
 	Chunk struct {
@@ -209,8 +210,9 @@ func Load(fp string) (sf SiaFile, _ error) {
 				return SiaFile{}, fmt.Errorf("piece index %v out of range", pieceIndex)
 			} else if hostIndex >= uint32(len(hostTable)) {
 				return SiaFile{}, fmt.Errorf("host index %v out of range", hostIndex)
+			} else if err := piece.HostKey.UnmarshalText([]byte(hostTable[hostIndex].PublicKey.String())); err != nil {
+				return SiaFile{}, fmt.Errorf("failed to decode host key: %w", err)
 			}
-			piece.HostKey = hostTable[hostIndex].PublicKey.String()
 			chunk.Pieces[pieceIndex] = append(chunk.Pieces[pieceIndex], piece)
 		}
 		sf.Chunks = append(sf.Chunks, chunk)
