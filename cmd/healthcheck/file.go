@@ -333,9 +333,10 @@ var (
 					continue
 				}
 
-				log.Printf("Checking for missing pieces -- need %v more pieces to recover...", ec.MinPieces()-recovered)
+				log.Printf("Checking for missing pieces -- need %v more to recover...", ec.MinPieces()-recovered)
 				// try to recover the missing pieces
 				for _, pieceIdx := range missingPieces {
+					log.Printf("Looking for piece %v (%v/%v)", pieceIdx+1, recovered, ec.MinPieces())
 					piece := chunk.Pieces[pieceIdx]
 					key := masterKey.Derive(uint64(chunkIdx), uint64(pieceIdx))
 					var sectorsRecovered int
@@ -347,30 +348,13 @@ var (
 							continue
 						}
 
-						var recoveredSector bool
-						availableHosts := r.Hosts()
-						log.Printf("Checking %v hosts for piece %v...", len(availableHosts), pieceIdx+1)
-						for _, host := range availableHosts {
-							buf, err := downloadSector(r, host, sector.MerkleRoot)
-							if err == nil {
-								sectorsRecovered++
-								recoveredData = append(recoveredData, buf...)
-								recoveredSector = true
-								log.Printf("Recovered sector %v from host %v", sector.MerkleRoot, host)
-								break
-							} else if strings.Contains(err.Error(), "could not find the desired sector") {
-								continue
-							} else if strings.Contains(err.Error(), "no record of that contract") {
-								// remove the host from the list of available hosts
-								r.RemoveHostContract(host)
-								log.Printf("[WARN] removed host %v from available hosts: contract not found -- form new contract", host)
-							} else {
-								log.Printf("[WARN] failed to download sector %v from host %v: %v", sector.MerkleRoot, host, err)
-							}
-						}
-						if !recoveredSector {
+						buf, recoveredSector := recoverSector(context.Background(), r, sector.MerkleRoot, workers)
+						if recoveredSector {
+							sectorsRecovered++
+							recoveredData = append(recoveredData, buf...)
+							log.Println("Recovered sector", sector.MerkleRoot)
+						} else {
 							log.Printf("Failed to recover sector %v", sector.MerkleRoot)
-							break
 						}
 					}
 
@@ -394,6 +378,7 @@ var (
 				if err := ec.Recover(recoveredPieces, chunkSize, output); err != nil {
 					log.Fatalf("failed to recover chunk %v: %v", chunkIdx, err)
 				}
+				log.Printf("Recovered chunk %v/%v", chunkIdx+1, len(sf.Chunks))
 			}
 		},
 	}
@@ -401,7 +386,7 @@ var (
 
 // downloadSector attempts to download a sector from a host.
 func downloadSector(r *renter.Renter, hostPub rhp.PublicKey, sector crypto.Hash) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	sess, err := r.NewSession(ctx, hostPub)

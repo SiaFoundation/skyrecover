@@ -39,18 +39,17 @@ func init() {
 	contractsFormCmd.Flags().BoolVarP(&force, "force", "f", force, "force contract formation")
 	contractsFormCmd.Flags().Uint64Var(&contractDownloadSize, "download-size", contractDownloadSize, "contract download size")
 	contractsFormCmd.Flags().Uint64Var(&contractDuration, "duration", contractDuration, "contract duration")
-
 	contractsCmd.AddCommand(contractsFormCmd, contractsHostsCmd)
+
 	walletCmd.AddCommand(walletDistributeCmd)
 
 	recoverCmd.Flags().StringVarP(&inputFile, "input", "i", "", "input file")
 	recoverCmd.Flags().StringVarP(&outputFile, "output", "o", "", "output file")
-
+	recoverCmd.Flags().IntVarP(&workers, "workers", "w", 100, "number of workers to use")
 	fileCmd.AddCommand(healthCheckCmd, recoverCmd)
 
-	rootCmd.AddCommand(walletCmd, contractsCmd, fileCmd)
-
 	rootCmd.PersistentFlags().StringVarP(&dataDir, "dir", "d", defaultDataDir, "data directory")
+	rootCmd.AddCommand(walletCmd, contractsCmd, fileCmd)
 }
 
 func main() {
