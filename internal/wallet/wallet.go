@@ -53,16 +53,15 @@ func (sw *SingleAddressWallet) refresh() error {
 	if err != nil {
 		return fmt.Errorf("failed to get address balance: %w", err)
 	}
-	utxos := resp.UnspentSiacoinOutputs
 
 	var filtered []SiacoinElement
-	for _, utxo := range utxos {
+	for _, utxo := range resp.UnspentSiacoinOutputs {
 		var outputID types.SiacoinOutputID
 		if _, err := hex.Decode(outputID[:], []byte(utxo.OutputID)); err != nil {
 			return fmt.Errorf("failed to decode output id: %w", err)
 		}
 
-		if utxo.MaturityHeight < tip.Height {
+		if utxo.MaturityHeight >= tip.Height {
 			continue
 		}
 
@@ -97,9 +96,15 @@ func (sw *SingleAddressWallet) Address() types.UnlockHash {
 }
 
 // Balance returns the wallet's balance.
-func (sw *SingleAddressWallet) Balance() (types.Currency, error) {
-	resp, err := siaCentralClient.GetAddressBalance(0, 0, sw.addr.String())
-	return resp.UnspentSiacoins, err
+func (sw *SingleAddressWallet) Balance() (balance types.Currency, _ error) {
+	utxos, err := sw.SpendableUTXOs()
+	if err != nil {
+		return types.ZeroCurrency, fmt.Errorf("failed to get spendable utxos: %w", err)
+	}
+	for _, utxo := range utxos {
+		balance = balance.Add(utxo.Value)
+	}
+	return
 }
 
 // SpendableUTXOs returns a list of spendable UTXOs.
