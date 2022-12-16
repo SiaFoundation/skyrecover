@@ -41,6 +41,9 @@ host for the sectors. For the secondary scan, many contracts are required; there
 are about 500 active hosts on the network. If `skyd` had a lot of churn, some
 sectors may still be recoverable.
 
+The wallet uses a 12-word BIP-39 renterd/walrus recovery phrase rather than a
+28/29 word Sia phrase.
+
 ### Building
 ```
 go build -o bin/ ./cmd/skyrecover
@@ -57,9 +60,9 @@ RECOVERY_PHRASE="board learn true grain combine pole talent country soon stock j
 ```
 
 ### Form contracts
-The utility will attempt to form small download-only contracts with every working host on the network. This will take a while.
+Will attempt to form contracts with each of the specified host public keys.
 ```
-RECOVERY_PHRASE="board learn true grain combine pole talent country soon stock juice client" skyrecover -d ~/recovery-data contracts form
+RECOVERY_PHRASE="board learn true grain combine pole talent country soon stock juice client" skyrecover -d ~/recovery-data contracts form <public key 1> [public key 2]...
 ```
 
 ### Check health
