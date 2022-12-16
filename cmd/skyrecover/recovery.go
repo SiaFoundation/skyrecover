@@ -36,7 +36,7 @@ func downloadWorker(ctx context.Context, r *renter.Renter, workChan <-chan work,
 			return
 		case piece, ok := <-workChan:
 			if !ok {
-				return
+				return // work chan is closed and empty, stop the worker
 			}
 			buf, err := downloadSector(r, piece.HostKey, piece.SectorRoot)
 			resultsChan <- result{
@@ -51,11 +51,11 @@ func downloadWorker(ctx context.Context, r *renter.Renter, workChan <-chan work,
 }
 
 func recoverSector(ctx context.Context, r *renter.Renter, sector crypto.Hash, workers int) ([]byte, bool) {
-	workChan := make(chan work, workers)
-	resultsChan := make(chan result, workers)
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	workChan := make(chan work, workers)
+	resultsChan := make(chan result, workers)
 
 	var wg sync.WaitGroup
 	wg.Add(workers)
@@ -67,9 +67,8 @@ func recoverSector(ctx context.Context, r *renter.Renter, sector crypto.Hash, wo
 	}
 
 	go func() {
-		// wait for all workers to finish then close the results channel
-		wg.Wait()
-		close(resultsChan)
+		wg.Wait()          // wait for all workers to finish
+		close(resultsChan) // close the results chan to signal to break out of the loop
 	}()
 
 	go func() {
@@ -86,17 +85,19 @@ func recoverSector(ctx context.Context, r *renter.Renter, sector crypto.Hash, wo
 				HostKey:    host,
 			}
 		}
+		// close the work chan to signal that no more hosts are available
 		close(workChan)
 	}()
 
 	for result := range resultsChan {
 		switch {
-		case result.Err == nil:
+		case result.Err == nil: // sector has been recovered
+			// cancel the context to stop the workers
 			cancel()
 			return result.Data, true
-		case strings.Contains(result.Err.Error(), "could not find the desired sector"):
+		case strings.Contains(result.Err.Error(), "could not find the desired sector"): // host does not have the sector, try another host
 			continue
-		case strings.Contains(result.Err.Error(), "no record of that contract"):
+		case strings.Contains(result.Err.Error(), "no record of that contract"): // sync issue -- host is missing contract, remove host from available hosts
 			// remove the host from the list of available hosts
 			r.RemoveHostContract(result.HostKey)
 			log.Printf("[WARN] removed host %v from available hosts: contract not found -- form new contract", result.HostKey)
