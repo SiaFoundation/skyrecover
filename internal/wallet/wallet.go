@@ -232,8 +232,6 @@ func (sw *SingleAddressWallet) Redistribute(outputs uint64, amount types.Currenc
 	}
 
 	sw.mu.Lock()
-	defer sw.mu.Unlock()
-
 	outputSum := amount.Mul64(outputs)
 	var inputSum types.Currency
 	var toSign []crypto.Hash
@@ -263,6 +261,7 @@ func (sw *SingleAddressWallet) Redistribute(outputs uint64, amount types.Currenc
 			break
 		}
 	}
+	sw.mu.Unlock()
 
 	if inputSum.Cmp(fundAmount) < 0 {
 		return types.Transaction{}, nil, fmt.Errorf("not enough funds to fund transaction: %v < %v", inputSum, amount)
